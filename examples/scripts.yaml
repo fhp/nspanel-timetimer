@@ -1,0 +1,28 @@
+# Home Assistant: scripts.yaml
+timer_over_minuten:
+  alias: Timer over N minuten
+  icon: mdi:timer-sand
+  fields:
+    minuten:
+      name: Minuten
+      required: true
+      default: 20
+      selector:
+        number: {min: 1, max: 60, unit_of_measurement: min}
+    label:
+      name: Label
+      default: Bedtijd
+      selector:
+        text: {}
+    kleur:
+      name: Kleur
+      default: rood
+      selector:
+        select:
+          options: [rood, oranje, geel, groen, blauw, paars]
+  sequence:
+    - action: esphome.nspanel_achterdeur_timer_start
+      data:
+        eindtijd: "{{ (now() + timedelta(minutes=minuten | int)).strftime('%H:%M') }}"
+        label: "{{ label }}"
+        kleur: "{{ kleur }}"

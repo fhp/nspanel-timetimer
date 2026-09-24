@@ -1,0 +1,15 @@
+# Home Assistant: automations.yaml
+- alias: Timer thema volgt de zon
+  triggers:
+    - trigger: sun
+      event: sunset
+      id: donker
+    - trigger: sun
+      event: sunrise
+      id: licht
+  actions:
+    - action: select.select_option
+      target:
+        entity_id: select.nspanel_achterdeur_timer_thema
+      data:
+        option: "{{ 'Donker' if trigger.id == 'donker' else 'Licht' }}"
