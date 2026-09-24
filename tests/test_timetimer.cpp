@@ -28,7 +28,15 @@ static void test_resolve_end_time() {
   CHECK(r.ok);
   CHECK(r.epoch == NOW + 12 * 3600 - 30);
 
-  r = resolve_end_time("19:00", NOW, NOW_SOD);  // current minute: tomorrow, too far ahead
+  r = resolve_end_time("19:00", NOW, NOW_SOD);  // current minute
+  CHECK(!r.ok);
+  CHECK(std::strstr(r.error, "nu of net voorbij") != nullptr);
+
+  r = resolve_end_time("18:59", NOW, NOW_SOD);  // just passed: would be tomorrow, more than 12 hours
+  CHECK(!r.ok);
+  CHECK(std::strstr(r.error, "nu of net voorbij") != nullptr);
+
+  r = resolve_end_time("14:00", NOW, 3600);  // at 01:00: later today, but more than 12 hours ahead
   CHECK(!r.ok);
   CHECK(std::strstr(r.error, "12 uur") != nullptr);
 
@@ -296,6 +304,18 @@ static void test_render() {
   CHECK(has_title && has_alabel && has_stop && has_aclock);
 }
 
+static void test_format_clock() {
+  CHECK(format_clock("%H:%M", 7, 5, "AM", "PM") == "07:05");
+  CHECK(format_clock("%-H:%M", 7, 5, "AM", "PM") == "7:05");
+  CHECK(format_clock("%-H.%M", 19, 30, "AM", "PM") == "19.30");
+  CHECK(format_clock("%-I:%M %p", 19, 30, "AM", "PM") == "7:30 PM");
+  CHECK(format_clock("%-I:%M %p", 0, 15, "am", "pm") == "12:15 am");
+  CHECK(format_clock("%-I:%M %p", 12, 0, "AM", "PM") == "12:00 PM");
+  CHECK(format_clock("%I:%M", 9, 0, "AM", "PM") == "09:00");
+  CHECK(format_clock("100%% %M", 9, 0, "AM", "PM") == "100% 00");
+  CHECK(format_clock("%Q", 9, 0, "AM", "PM") == "%Q");
+}
+
 int main() {
   test_resolve_end_time();
   test_colors();
@@ -305,6 +325,7 @@ int main() {
   test_machine_stop_restore_replace();
   test_geometry();
   test_render();
+  test_format_clock();
   if (failures == 0) std::printf("OK\n");
   return failures == 0 ? 0 : 1;
 }

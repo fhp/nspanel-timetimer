@@ -44,9 +44,45 @@ inline EndTime resolve_end_time(const std::string &hhmm, int64_t now_epoch, int3
     return {false, 0, "ongeldige eindtijd, verwacht HH:MM"};
   }
   int64_t delta = int64_t(h) * 3600 + int64_t(m) * 60 - now_seconds_of_day;
-  if (delta <= 0) delta += 86400;
+  if (delta <= 0) {
+    delta += 86400;
+    if (delta > MAX_AHEAD_S) return {false, 0, "eindtijd is nu of net voorbij"};
+  }
   if (delta > MAX_AHEAD_S) return {false, 0, "eindtijd ligt meer dan 12 uur vooruit"};
   return {true, now_epoch + delta, nullptr};
+}
+
+// Expands the panel's clock format (mui_time_format). The blueprint's formats use glibc's
+// %-H / %-I, which newlib's strftime does not support.
+inline std::string format_clock(const std::string &fmt, int hour, int minute, const std::string &am,
+                                const std::string &pm) {
+  auto two = [](int v) {
+    char buf[4];
+    std::snprintf(buf, sizeof(buf), "%02d", v);
+    return std::string(buf);
+  };
+  const int hour12 = hour % 12 == 0 ? 12 : hour % 12;
+  std::string out;
+  for (size_t i = 0; i < fmt.size(); ++i) {
+    if (fmt[i] != '%' || i + 1 >= fmt.size()) {
+      out += fmt[i];
+      continue;
+    }
+    std::string spec = fmt.substr(i + 1, fmt[i + 1] == '-' ? 2 : 1);
+    if (spec == "H") out += two(hour);
+    else if (spec == "-H") out += std::to_string(hour);
+    else if (spec == "I") out += two(hour12);
+    else if (spec == "-I") out += std::to_string(hour12);
+    else if (spec == "M") out += two(minute);
+    else if (spec == "p") out += hour < 12 ? am : pm;
+    else if (spec == "%") out += '%';
+    else {
+      out += '%';
+      continue;
+    }
+    i += spec.size();
+  }
+  return out;
 }
 
 inline bool color_from_name(const std::string &name, uint16_t &out) {

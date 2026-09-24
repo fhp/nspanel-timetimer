@@ -141,6 +141,12 @@ script:
           }
       - script.execute: timetimer_tick
 
+  # Upstream redraws the QR code whenever the QR entity changes while the page is open.
+  - id: !extend page_qrcode
+    then:
+      - lambda: |-
+          if (timetimer::shows_page(id(tt_machine).state())) id(tt_drawn) = 0;
+
   - id: !extend timer_reset_all
     then:
       - lambda: |-
@@ -184,23 +190,29 @@ script:
               goto_page->execute(${PAGE_QRCODE_ID});
               return;  // drawing starts from page_change once the page is open
             }
-          } else if (timetimer::shows_page(before) and current_page_id == ${PAGE_QRCODE_ID}) {
-            id(tt_queue).clear();
-            id(tt_drawn) = 0;
-            goto_page->execute(id(tt_prev_page));
+          } else if (timetimer::shows_page(before)) {
+            if (current_page_id == ${PAGE_QRCODE_ID}) {
+              id(tt_queue).clear();
+              id(tt_drawn) = 0;
+              uint8_t target = id(tt_prev_page);
+              // Tapping away is meant to reach a usable panel, not the dark screensaver the timer woke from.
+              if (st == timetimer::State::DISMISSED and target == ${PAGE_SCREENSAVER_ID}) target = wakeup_page_id;
+              goto_page->execute(target);
+            }
             timer_reset_all->execute();
             return;
           }
           if (!shows or current_page_id != ${PAGE_QRCODE_ID}) return;
 
           const std::string fmt = id(mui_time_format);
+          const ESPTime end_time = ESPTime::from_epoch_local(m.end());
           timetimer::View v{
               tt_theme->current_option() == std::string("Donker") ? timetimer::DARK : timetimer::LIGHT,
               id(tt_color),
               m.remaining(now.timestamp),
               id(tt_label),
-              ESPTime::from_epoch_local(m.end()).strftime(fmt),
-              now.strftime(fmt),
+              timetimer::format_clock(fmt, end_time.hour, end_time.minute, id(mui_meridiem_am), id(mui_meridiem_pm)),
+              timetimer::format_clock(fmt, now.hour, now.minute, id(mui_meridiem_am), id(mui_meridiem_pm)),
           };
           std::vector<std::string> cmds;
           const uint8_t want = st == timetimer::State::VISIBLE ? 1 : 2;
