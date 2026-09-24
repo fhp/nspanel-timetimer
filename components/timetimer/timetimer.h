@@ -71,4 +71,98 @@ inline bool color_from_name(const std::string &name, uint16_t &out) {
   return false;
 }
 
+enum class State : uint8_t { OFF, SCHEDULED, VISIBLE, DISMISSED, ALARM, AFTERGLOW };
+
+inline bool shows_page(State s) {
+  return s == State::VISIBLE || s == State::ALARM || s == State::AFTERGLOW;
+}
+
+class Machine {
+ public:
+  void start(int64_t end_epoch, int64_t now) {
+    end_ = end_epoch;
+    state_ = State::SCHEDULED;
+    update(now);
+  }
+
+  // Used after boot: an end time that passed while the panel was down is dropped silently.
+  void restore(int64_t end_epoch, int64_t now) {
+    if (end_epoch <= now) {
+      stop();
+      return;
+    }
+    start(end_epoch, now);
+  }
+
+  void stop() {
+    state_ = State::OFF;
+    end_ = 0;
+  }
+
+  void update(int64_t now) {
+    switch (state_) {
+      case State::OFF:
+        break;
+      case State::SCHEDULED:
+        if (now >= end_) enter(State::ALARM, now);
+        else if (end_ - now <= VISIBLE_WINDOW_S) state_ = State::VISIBLE;
+        break;
+      case State::VISIBLE:
+        if (now >= end_) enter(State::ALARM, now);
+        break;
+      case State::DISMISSED:
+        if (now >= end_) enter(State::ALARM, now);
+        else if (now - since_ >= DISMISS_RETURN_S) state_ = State::VISIBLE;
+        break;
+      case State::ALARM:
+        if (now - since_ >= BEEP_DURATION_S) enter(State::AFTERGLOW, now);
+        break;
+      case State::AFTERGLOW:
+        if (now - since_ >= AFTERGLOW_S) stop();
+        break;
+    }
+  }
+
+  void tap(int64_t now) {
+    switch (state_) {
+      case State::VISIBLE:
+      case State::DISMISSED:
+        enter(State::DISMISSED, now);
+        break;
+      case State::ALARM:
+        enter(State::AFTERGLOW, now);
+        break;
+      case State::AFTERGLOW:
+        stop();
+        break;
+      default:
+        break;
+    }
+  }
+
+  // Something other than a tap on the timer page navigated away from it.
+  void left_page(int64_t now) {
+    if (state_ == State::VISIBLE) enter(State::DISMISSED, now);
+    else if (state_ == State::ALARM || state_ == State::AFTERGLOW) stop();
+  }
+
+  bool should_beep(int64_t now) const {
+    return state_ == State::ALARM && (now - since_) % BEEP_INTERVAL_S == 0;
+  }
+
+  int64_t remaining(int64_t now) const { return end_ > now ? end_ - now : 0; }
+  State state() const { return state_; }
+  int64_t end() const { return end_; }
+
+ private:
+  void enter(State s, int64_t now) {
+    state_ = s;
+    since_ = now;
+  }
+
+  State state_{State::OFF};
+  int64_t end_{0};
+  int64_t since_{0};
+};
+
 }  // namespace timetimer

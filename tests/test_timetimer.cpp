@@ -62,9 +62,112 @@ static void test_colors() {
   CHECK(!color_from_name("roze", c) && c == COLOR_RED);
 }
 
+static void test_machine_schedule_and_visible() {
+  Machine m;
+  CHECK(m.state() == State::OFF);
+
+  m.start(NOW + 7200, NOW);
+  CHECK(m.state() == State::SCHEDULED);
+  m.update(NOW + 3599);
+  CHECK(m.state() == State::SCHEDULED);
+  m.update(NOW + 3600);
+  CHECK(m.state() == State::VISIBLE);
+  CHECK(m.remaining(NOW + 3600) == 3600);
+
+  m.start(NOW + 600, NOW);
+  CHECK(m.state() == State::VISIBLE);
+  CHECK(m.end() == NOW + 600);
+}
+
+static void test_machine_dismiss() {
+  Machine m;
+  m.start(NOW + 600, NOW);
+  m.tap(NOW + 10);
+  CHECK(m.state() == State::DISMISSED);
+  m.update(NOW + 39);
+  CHECK(m.state() == State::DISMISSED);
+  m.tap(NOW + 39);  // touch on another page keeps it dismissed
+  m.update(NOW + 68);
+  CHECK(m.state() == State::DISMISSED);
+  m.update(NOW + 69);
+  CHECK(m.state() == State::VISIBLE);
+
+  m.left_page(NOW + 100);
+  CHECK(m.state() == State::DISMISSED);
+  m.update(NOW + 600);  // end reached while dismissed
+  CHECK(m.state() == State::ALARM);
+}
+
+static void test_machine_alarm_and_afterglow() {
+  Machine m;
+  m.start(NOW + 10, NOW);
+  m.update(NOW + 10);
+  CHECK(m.state() == State::ALARM);
+  CHECK(m.should_beep(NOW + 10));
+  CHECK(!m.should_beep(NOW + 11));
+  CHECK(m.should_beep(NOW + 13));
+  CHECK(m.should_beep(NOW + 37));
+  m.update(NOW + 39);
+  CHECK(m.state() == State::ALARM);
+  m.update(NOW + 40);
+  CHECK(m.state() == State::AFTERGLOW);
+  CHECK(!m.should_beep(NOW + 40));
+  m.update(NOW + 99);
+  CHECK(m.state() == State::AFTERGLOW);
+  m.update(NOW + 100);
+  CHECK(m.state() == State::OFF);
+
+  m.start(NOW + 10, NOW);
+  m.update(NOW + 10);
+  m.tap(NOW + 12);
+  CHECK(m.state() == State::AFTERGLOW);
+  m.tap(NOW + 20);
+  CHECK(m.state() == State::OFF);
+
+  m.start(NOW + 10, NOW);
+  m.update(NOW + 10);
+  m.left_page(NOW + 11);
+  CHECK(m.state() == State::OFF);
+}
+
+static void test_machine_stop_restore_replace() {
+  const State states_to_try[] = {State::SCHEDULED, State::VISIBLE, State::DISMISSED, State::ALARM, State::AFTERGLOW};
+  for (State target : states_to_try) {
+    Machine m;
+    m.start(NOW + 7200, NOW);
+    if (target != State::SCHEDULED) m.update(NOW + 3600);
+    if (target == State::DISMISSED) m.tap(NOW + 3600);
+    if (target == State::ALARM || target == State::AFTERGLOW) m.update(NOW + 7200);
+    if (target == State::AFTERGLOW) m.tap(NOW + 7201);
+    CHECK(m.state() == target);
+    m.stop();
+    CHECK(m.state() == State::OFF);
+    CHECK(m.end() == 0);
+  }
+
+  Machine m;
+  m.restore(NOW - 5, NOW);
+  CHECK(m.state() == State::OFF);
+  m.restore(0, NOW);
+  CHECK(m.state() == State::OFF);
+  m.restore(NOW + 300, NOW);
+  CHECK(m.state() == State::VISIBLE);
+
+  m.start(NOW + 900, NOW + 1);
+  CHECK(m.end() == NOW + 900);
+  CHECK(m.state() == State::VISIBLE);
+
+  CHECK(shows_page(State::VISIBLE) && shows_page(State::ALARM) && shows_page(State::AFTERGLOW));
+  CHECK(!shows_page(State::OFF) && !shows_page(State::SCHEDULED) && !shows_page(State::DISMISSED));
+}
+
 int main() {
   test_resolve_end_time();
   test_colors();
+  test_machine_schedule_and_visible();
+  test_machine_dismiss();
+  test_machine_alarm_and_afterglow();
+  test_machine_stop_restore_replace();
   if (failures == 0) std::printf("OK\n");
   return failures == 0 ? 0 : 1;
 }
