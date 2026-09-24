@@ -1,0 +1,20 @@
+substitutions:
+  device_name: nspanel-timetimer-test
+  friendly_name: NSPanel timetimer test
+  wifi_ssid: test-ssid
+  wifi_password: test-password
+
+external_components:
+  - source:
+      type: local
+      path: ../components
+    components: [timetimer]
+
+packages:
+  remote_package:
+    url: https://github.com/Blackymas/NSPanel_HA_Blueprint
+    ref: main
+    refresh: 1d
+    files:
+      - nspanel_esphome.yaml
+  timetimer: !include ../timetimer.yaml

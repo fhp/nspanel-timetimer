@@ -1,0 +1,229 @@
+---
+substitutions:
+  timetimer_commands_per_tick: '8'
+  timetimer_tone: 'timetimer:d=16,o=6,b=180:c,p,c,p,c'
+  TAG_TIMETIMER: timetimer
+
+timetimer:
+
+globals:
+  - id: tt_end_epoch
+    type: int64_t
+    restore_value: true
+    initial_value: '0'
+  - id: tt_label
+    type: std::string
+    restore_value: true
+    max_restore_data_length: 63
+    initial_value: '""'
+  - id: tt_color
+    type: uint16_t
+    restore_value: true
+    initial_value: '55717'
+  - id: tt_machine
+    type: timetimer::Machine
+  - id: tt_restored
+    type: bool
+    initial_value: 'false'
+  - id: tt_last_state
+    type: uint8_t
+    initial_value: '0'
+  - id: tt_prev_page
+    type: uint8_t
+    initial_value: '1'
+  # 0 = nothing of ours on screen, 1 = timer screen, 2 = alarm screen
+  - id: tt_drawn
+    type: uint8_t
+    initial_value: '0'
+  - id: tt_drawn_fraction
+    type: double
+    initial_value: '0'
+  - id: tt_drawn_clock
+    type: std::string
+    initial_value: '""'
+  - id: tt_queue
+    type: std::deque<std::string>
+
+select:
+  - platform: template
+    name: Timer thema
+    id: tt_theme
+    icon: mdi:theme-light-dark
+    entity_category: config
+    options: [Licht, Donker]
+    initial_option: Licht
+    optimistic: true
+    restore_value: true
+    on_value:
+      then:
+        - lambda: id(tt_drawn) = 0;
+        - script.execute: timetimer_tick
+
+api:
+  actions:
+    - action: timer_start
+      variables:
+        eindtijd: string
+        label: string
+        kleur: string
+      then:
+        - lambda: |-
+            auto now = id(time_provider).now();
+            if (!now.is_valid()) {
+              ESP_LOGE("${TAG_TIMETIMER}", "timer_start geweigerd: klok nog niet gesynchroniseerd");
+              return;
+            }
+            auto r = timetimer::resolve_end_time(eindtijd, now.timestamp,
+                                                 now.hour * 3600 + now.minute * 60 + now.second);
+            if (!r.ok) {
+              ESP_LOGE("${TAG_TIMETIMER}", "timer_start geweigerd (%s): %s", eindtijd.c_str(), r.error);
+              return;
+            }
+            uint16_t color;
+            if (!timetimer::color_from_name(kleur, color)) {
+              ESP_LOGW("${TAG_TIMETIMER}", "Onbekende kleur '%s', rood gebruikt", kleur.c_str());
+            }
+            id(tt_end_epoch) = r.epoch;
+            id(tt_label) = label;
+            id(tt_color) = color;
+            id(tt_machine).start(r.epoch, now.timestamp);
+            id(tt_restored) = true;
+            id(tt_drawn) = 0;
+            ESP_LOGI("${TAG_TIMETIMER}", "Timer gestart: '%s' tot %s", label.c_str(), eindtijd.c_str());
+        - script.execute: timetimer_tick
+    - action: timer_stop
+      then:
+        - lambda: |-
+            id(tt_machine).stop();
+            id(tt_end_epoch) = 0;
+            ESP_LOGI("${TAG_TIMETIMER}", "Timer gestopt");
+        - script.execute: timetimer_tick
+
+display:
+  - id: !extend disp1
+    on_touch:
+      then:
+        - lambda: |-
+            if (touch_event) return;  // act on release only
+            auto now = id(time_provider).now();
+            if (!now.is_valid()) return;
+            auto &m = id(tt_machine);
+            if ((page_id == ${PAGE_QRCODE_ID} and timetimer::shows_page(m.state())) or
+                m.state() == timetimer::State::DISMISSED) {
+              m.tap(now.timestamp);
+              timetimer_tick->execute();
+            }
+
+interval:
+  - interval: 1s
+    then:
+      - script.execute: timetimer_tick
+  - interval: 20ms
+    then:
+      - lambda: |-
+          auto &q = id(tt_queue);
+          for (int n = ${timetimer_commands_per_tick}; n > 0 and !q.empty(); --n) {
+            disp1->send_command(q.front().c_str());
+            q.pop_front();
+          }
+
+script:
+  - id: !extend page_change
+    then:
+      - lambda: |-
+          if (new_page_id != ${PAGE_QRCODE_ID}) {
+            id(tt_queue).clear();
+            id(tt_drawn) = 0;
+            auto now = id(time_provider).now();
+            if (now.is_valid()) id(tt_machine).left_page(now.timestamp);
+          } else {
+            id(tt_drawn) = 0;
+          }
+      - script.execute: timetimer_tick
+
+  - id: !extend timer_reset_all
+    then:
+      - lambda: |-
+          if (timetimer::shows_page(id(tt_machine).state())) {
+            timer_dim->stop();
+            timer_sleep->stop();
+            timer_page->stop();
+          }
+
+  - id: timetimer_tick
+    mode: single
+    then:
+      - lambda: |-
+          auto now = id(time_provider).now();
+          if (!now.is_valid() or current_page_id == ${PAGE_BOOT_ID}) return;
+          auto &m = id(tt_machine);
+          if (!id(tt_restored)) {
+            m.restore(id(tt_end_epoch), now.timestamp);
+            id(tt_restored) = true;
+          }
+
+          const auto before = static_cast<timetimer::State>(id(tt_last_state));
+          m.update(now.timestamp);
+          const auto st = m.state();
+          id(tt_last_state) = static_cast<uint8_t>(st);
+          if (st == timetimer::State::OFF) id(tt_end_epoch) = 0;
+
+          #ifdef NSPANEL_HA_BLUEPRINT_HW_BUZZER
+          if (m.should_beep(now.timestamp)) buzzer->play("${timetimer_tone}");
+          if (before == timetimer::State::ALARM and st != timetimer::State::ALARM) buzzer->stop();
+          #endif
+
+          const bool shows = timetimer::shows_page(st);
+          if (shows) {
+            timer_dim->stop();
+            timer_sleep->stop();
+            timer_page->stop();
+            set_brightness->execute(display_brightness->state);
+            if (current_page_id != ${PAGE_QRCODE_ID}) {
+              id(tt_prev_page) = current_page_id;
+              goto_page->execute(${PAGE_QRCODE_ID});
+              return;  // drawing starts from page_change once the page is open
+            }
+          } else if (timetimer::shows_page(before) and current_page_id == ${PAGE_QRCODE_ID}) {
+            id(tt_queue).clear();
+            id(tt_drawn) = 0;
+            goto_page->execute(id(tt_prev_page));
+            timer_reset_all->execute();
+            return;
+          }
+          if (!shows or current_page_id != ${PAGE_QRCODE_ID}) return;
+
+          const std::string fmt = id(mui_time_format);
+          timetimer::View v{
+              tt_theme->current_option() == std::string("Donker") ? timetimer::DARK : timetimer::LIGHT,
+              id(tt_color),
+              m.remaining(now.timestamp),
+              id(tt_label),
+              ESPTime::from_epoch_local(m.end()).strftime(fmt),
+              now.strftime(fmt),
+          };
+          std::vector<std::string> cmds;
+          const uint8_t want = st == timetimer::State::VISIBLE ? 1 : 2;
+          if (id(tt_drawn) != want) {
+            id(tt_queue).clear();
+            if (want == 1) timetimer::render_timer_full(v, cmds);
+            else timetimer::render_alarm_full(v, cmds);
+            id(tt_drawn) = want;
+            id(tt_drawn_fraction) = timetimer::fraction_for(v.remaining_s);
+            id(tt_drawn_clock) = v.clock_text;
+          } else if (want == 1) {
+            const double f = timetimer::fraction_for(v.remaining_s);
+            if (id(tt_drawn_fraction) - f >= 10.0 / 3600.0 or (f == 0.0 and id(tt_drawn_fraction) > 0.0)) {
+              timetimer::render_sliver(v, f, id(tt_drawn_fraction), cmds);
+              id(tt_drawn_fraction) = f;
+            }
+            timetimer::render_countdown(v, cmds);
+            if (v.clock_text != id(tt_drawn_clock)) {
+              timetimer::render_timer_clock(v, cmds);
+              id(tt_drawn_clock) = v.clock_text;
+            }
+          } else if (v.clock_text != id(tt_drawn_clock)) {
+            timetimer::render_alarm_clock(v, cmds);
+            id(tt_drawn_clock) = v.clock_text;
+          }
+          for (auto &c : cmds) id(tt_queue).push_back(std::move(c));
