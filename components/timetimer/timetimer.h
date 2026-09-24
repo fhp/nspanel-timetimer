@@ -165,4 +165,63 @@ class Machine {
   int64_t since_{0};
 };
 
+constexpr int CX = 140;
+constexpr int CY = 166;
+constexpr int R = 108;
+constexpr int LABEL_R = 123;
+constexpr int TICK_OUTER = R - 2;
+constexpr int TICK_INNER = R - 16;
+constexpr int HUB_R = 10;
+constexpr double TAU = 6.283185307179586;
+
+struct Span {
+  int16_t x, y, w;
+};
+
+struct Point {
+  int x, y;
+};
+
+inline double fraction_for(int64_t remaining_s) {
+  if (remaining_s <= 0) return 0.0;
+  if (remaining_s >= VISIBLE_WINDOW_S) return 1.0;
+  return double(remaining_s) / double(VISIBLE_WINDOW_S);
+}
+
+// Counterclockwise from 12 o'clock, like the face of a Time Timer; result in [0, 1).
+inline double fraction_at(int dx, int dy) {
+  double a = std::atan2(-double(dx), -double(dy));
+  if (a < 0) a += TAU;
+  double f = a / TAU;
+  return f >= 1.0 ? 0.0 : f;
+}
+
+inline Point on_circle(int cx, int cy, double r, double fraction) {
+  return {int(std::lround(cx - r * std::sin(fraction * TAU))), int(std::lround(cy - r * std::cos(fraction * TAU)))};
+}
+
+inline std::vector<Span> sector_spans(int cx, int cy, int r, double from, double to) {
+  std::vector<Span> out;
+  if (to <= from) return out;
+  for (int dy = -r; dy <= r; ++dy) {
+    bool in_run = false;
+    int run_start = 0;
+    for (int dx = -r; dx <= r + 1; ++dx) {
+      bool inside = false;
+      if (dx <= r && dx * dx + dy * dy <= r * r) {
+        double f = fraction_at(dx, dy);
+        inside = f >= from && f < to;
+      }
+      if (inside && !in_run) {
+        in_run = true;
+        run_start = dx;
+      } else if (!inside && in_run) {
+        in_run = false;
+        out.push_back({int16_t(cx + run_start), int16_t(cy + dy), int16_t(dx - run_start)});
+      }
+    }
+  }
+  return out;
+}
+
 }  // namespace timetimer

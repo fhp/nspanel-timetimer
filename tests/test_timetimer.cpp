@@ -161,6 +161,62 @@ static void test_machine_stop_restore_replace() {
   CHECK(!shows_page(State::OFF) && !shows_page(State::SCHEDULED) && !shows_page(State::DISMISSED));
 }
 
+static long pixel_count(const std::vector<Span> &spans) {
+  long n = 0;
+  for (const Span &s : spans) n += s.w;
+  return n;
+}
+
+static bool spans_valid(const std::vector<Span> &spans, int cx, int cy, int r) {
+  for (size_t i = 0; i < spans.size(); ++i) {
+    const Span &s = spans[i];
+    if (s.w <= 0) return false;
+    for (int x = s.x; x < s.x + s.w; ++x) {
+      int dx = x - cx, dy = s.y - cy;
+      if (dx * dx + dy * dy > r * r) return false;
+    }
+    if (i > 0 && spans[i - 1].y == s.y && spans[i - 1].x + spans[i - 1].w >= s.x) return false;  // spans on one row must not touch or overlap
+  }
+  return true;
+}
+
+static void test_geometry() {
+  const int cx = 140, cy = 166, r = 108;
+  auto full = sector_spans(cx, cy, r, 0.0, 1.0);
+  CHECK(spans_valid(full, cx, cy, r));
+  CHECK(full.size() == size_t(2 * r + 1));  // one span per row
+  long disc = pixel_count(full);
+  CHECK(std::fabs(disc - M_PI * r * r) < 2 * M_PI * r);
+
+  CHECK(sector_spans(cx, cy, r, 0.0, 0.0).empty());
+  CHECK(sector_spans(cx, cy, r, 0.5, 0.25).empty());
+
+  auto quarter = sector_spans(cx, cy, r, 0.0, 0.25);  // top-left quadrant
+  CHECK(spans_valid(quarter, cx, cy, r));
+  for (const Span &s : quarter) CHECK(s.x + s.w - 1 <= cx && s.y <= cy);
+
+  auto a = sector_spans(cx, cy, r, 0.0, 0.3);
+  auto b = sector_spans(cx, cy, r, 0.3, 0.75);
+  auto c = sector_spans(cx, cy, r, 0.75, 1.0);
+  CHECK(pixel_count(a) + pixel_count(b) + pixel_count(c) == disc);  // no gaps, no overlap
+  CHECK(spans_valid(a, cx, cy, r) && spans_valid(b, cx, cy, r) && spans_valid(c, cx, cy, r));
+
+  auto sliver = sector_spans(cx, cy, r, 0.5, 0.5 + 1.0 / 360.0);
+  CHECK(!sliver.empty());
+  CHECK(spans_valid(sliver, cx, cy, r));
+
+  Point top = on_circle(cx, cy, 100, 0.0);
+  CHECK(top.x == 140 && top.y == 66);
+  Point left = on_circle(cx, cy, 100, 0.25);  // counterclockwise: 15 minutes is at 9 o'clock
+  CHECK(left.x == 40 && left.y == 166);
+  Point bottom = on_circle(cx, cy, 100, 0.5);
+  CHECK(bottom.x == 140 && bottom.y == 266);
+
+  CHECK(fraction_for(1800) == 0.5);
+  CHECK(fraction_for(-5) == 0.0);
+  CHECK(fraction_for(7200) == 1.0);
+}
+
 int main() {
   test_resolve_end_time();
   test_colors();
@@ -168,6 +224,7 @@ int main() {
   test_machine_dismiss();
   test_machine_alarm_and_afterglow();
   test_machine_stop_restore_replace();
+  test_geometry();
   if (failures == 0) std::printf("OK\n");
   return failures == 0 ? 0 : 1;
 }
