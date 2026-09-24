@@ -217,6 +217,85 @@ static void test_geometry() {
   CHECK(fraction_for(7200) == 1.0);
 }
 
+static bool starts_with(const std::string &s, const char *prefix) { return s.rfind(prefix, 0) == 0; }
+
+static size_t count_prefix(const std::vector<std::string> &cmds, const char *prefix) {
+  size_t n = 0;
+  for (const auto &c : cmds) n += starts_with(c, prefix);
+  return n;
+}
+
+static View sample_view() {
+  return View{LIGHT, 11130, 1350, "Bedtijd", "20:00", "19:37"};
+}
+
+static void test_render() {
+  CHECK(escape_text("a\"b\\c") == "a'b/c");
+  CHECK(format_mmss(1350) == "22:30");
+  CHECK(format_mmss(3600) == "60:00");
+  CHECK(format_mmss(5) == "0:05");
+  CHECK(format_mmss(-3) == "0:00");
+
+  std::vector<std::string> cmds;
+  View v = sample_view();
+  render_timer_full(v, cmds);
+  CHECK(cmds.front() == "fill 0,0,480,320,65502");
+  CHECK(cmds[1] == "cirs 140,166,108,61276");
+  size_t sector_rows = sector_spans(CX, CY, R, 0.0, fraction_for(v.remaining_s)).size();
+  CHECK(count_prefix(cmds, "fill ") == 1 + sector_rows);
+  CHECK(count_prefix(cmds, "line ") == 24);  // 12 ticks, 2 px wide
+  bool has_label = false, has_countdown = false, has_end = false, has_clock = false, has_zero = false, has_55 = false;
+  for (const auto &c : cmds) {
+    has_label |= c == "xstr 276,70,194,34,3,6338,65502,0,1,1,\"Bedtijd\"";
+    has_countdown |= c == "xstr 276,112,194,80,6,11130,65502,0,1,1,\"22:30\"";
+    has_end |= c == "xstr 276,196,194,24,1,23241,65502,0,1,1,\"klaar om 20:00\"";
+    has_clock |= c == "xstr 372,6,100,28,2,23241,65502,2,1,1,\"19:37\"";
+    has_zero |= c == "xstr 126,34,28,18,0,23241,65502,1,1,1,\"0\"";
+    has_55 |= starts_with(c, "xstr ") && c.find(",\"55\"") != std::string::npos;
+  }
+  CHECK(has_label && has_countdown && has_end && has_clock && has_zero && has_55);
+  CHECK(count_prefix(cmds, "cirs 140,166,10,14757") == 1);
+
+  for (const auto &c : cmds) {
+    if (!starts_with(c, "fill ") || c == cmds.front()) continue;
+    CHECK(c.find(",1,11130") != std::string::npos);  // sector rows are 1 px high in the timer colour
+  }
+
+  cmds.clear();
+  View q = v;
+  q.label = "Zeg \"hoi\"";
+  render_timer_full(q, cmds);
+  bool escaped = false;
+  for (const auto &c : cmds) escaped |= c.find("\"Zeg 'hoi'\"") != std::string::npos;
+  CHECK(escaped);
+
+  cmds.clear();
+  render_sliver(v, 0.37, 0.375, cmds);
+  CHECK(!cmds.empty());
+  for (const auto &c : cmds) {
+    if (starts_with(c, "fill ")) CHECK(c.find(",1,61276") != std::string::npos);  // painted in face colour
+  }
+  CHECK(count_prefix(cmds, "line ") == 24);
+  CHECK(count_prefix(cmds, "cirs 140,166,10,") == 1);
+
+  cmds.clear();
+  render_countdown(v, cmds);
+  CHECK(cmds.size() == 1 && cmds[0] == "xstr 276,112,194,80,6,11130,65502,0,1,1,\"22:30\"");
+
+  cmds.clear();
+  render_alarm_full(v, cmds);
+  CHECK(cmds.front() == "fill 0,0,480,320,47427");
+  CHECK(count_prefix(cmds, "draw ") == 2);
+  bool has_title = false, has_alabel = false, has_stop = false, has_aclock = false;
+  for (const auto &c : cmds) {
+    has_title |= c == "xstr 0,104,480,60,5,65535,47427,1,1,1,\"Tijd is om!\"";
+    has_alabel |= c == "xstr 0,166,480,34,3,65535,47427,1,1,1,\"Bedtijd\"";
+    has_stop |= c == "xstr 152,218,176,52,3,65535,47427,1,1,1,\"Stop\"";
+    has_aclock |= c == "xstr 372,6,100,28,2,65535,47427,2,1,1,\"19:37\"";
+  }
+  CHECK(has_title && has_alabel && has_stop && has_aclock);
+}
+
 int main() {
   test_resolve_end_time();
   test_colors();
@@ -225,6 +304,7 @@ int main() {
   test_machine_alarm_and_afterglow();
   test_machine_stop_restore_replace();
   test_geometry();
+  test_render();
   if (failures == 0) std::printf("OK\n");
   return failures == 0 ? 0 : 1;
 }

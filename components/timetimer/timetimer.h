@@ -224,4 +224,114 @@ inline std::vector<Span> sector_spans(int cx, int cy, int r, double from, double
   return out;
 }
 
+// mdi:bell-ring, in the code point range the panel's MDI font uses.
+constexpr const char *BELL_ICON = "";
+
+struct View {
+  Theme theme;
+  uint16_t color;
+  int64_t remaining_s;
+  std::string label;
+  std::string end_text;
+  std::string clock_text;
+};
+
+// Nextion string literals have no escaping for these characters.
+inline std::string escape_text(const std::string &s) {
+  std::string out;
+  out.reserve(s.size());
+  for (char c : s) out += c == '"' ? '\'' : c == '\\' ? '/' : c;
+  return out;
+}
+
+inline std::string format_mmss(int64_t seconds) {
+  if (seconds < 0) seconds = 0;
+  char buf[16];
+  std::snprintf(buf, sizeof(buf), "%d:%02d", int(seconds / 60), int(seconds % 60));
+  return buf;
+}
+
+inline std::string xstr(int x, int y, int w, int h, int font, uint16_t pco, uint16_t bco, int xcen,
+                        const std::string &text) {
+  return "xstr " + std::to_string(x) + "," + std::to_string(y) + "," + std::to_string(w) + "," +
+         std::to_string(h) + "," + std::to_string(font) + "," + std::to_string(pco) + "," +
+         std::to_string(bco) + "," + std::to_string(xcen) + ",1,1,\"" + escape_text(text) + "\"";
+}
+
+inline std::string cmd_fill(int x, int y, int w, int h, uint16_t color) {
+  return "fill " + std::to_string(x) + "," + std::to_string(y) + "," + std::to_string(w) + "," +
+         std::to_string(h) + "," + std::to_string(color);
+}
+
+inline std::string cmd_xy2(const char *op, int x1, int y1, int x2, int y2, uint16_t color) {
+  return std::string(op) + " " + std::to_string(x1) + "," + std::to_string(y1) + "," + std::to_string(x2) + "," +
+         std::to_string(y2) + "," + std::to_string(color);
+}
+
+inline std::string cmd_cirs(int x, int y, int r, uint16_t color) {
+  return "cirs " + std::to_string(x) + "," + std::to_string(y) + "," + std::to_string(r) + "," +
+         std::to_string(color);
+}
+
+inline void render_spans(const std::vector<Span> &spans, uint16_t color, std::vector<std::string> &out) {
+  for (const Span &s : spans) out.push_back(cmd_fill(s.x, s.y, s.w, 1, color));
+}
+
+// Ticks and hub sit on top of the sector and are repainted after every sector change.
+inline void render_face_overlay(const View &v, std::vector<std::string> &out) {
+  for (int i = 0; i < 12; ++i) {
+    Point a = on_circle(CX, CY, TICK_OUTER, i / 12.0);
+    Point b = on_circle(CX, CY, TICK_INNER, i / 12.0);
+    bool mostly_horizontal = std::abs(a.x - b.x) > std::abs(a.y - b.y);
+    int ox = mostly_horizontal ? 0 : 1;
+    int oy = mostly_horizontal ? 1 : 0;
+    out.push_back(cmd_xy2("line", a.x, a.y, b.x, b.y, v.theme.tick));
+    out.push_back(cmd_xy2("line", a.x + ox, a.y + oy, b.x + ox, b.y + oy, v.theme.tick));
+  }
+  out.push_back(cmd_cirs(CX, CY, HUB_R, v.theme.tick));
+}
+
+inline void render_countdown(const View &v, std::vector<std::string> &out) {
+  out.push_back(xstr(276, 112, 194, 80, 6, v.color, v.theme.bg, 0, format_mmss(v.remaining_s)));
+}
+
+inline void render_timer_clock(const View &v, std::vector<std::string> &out) {
+  out.push_back(xstr(372, 6, 100, 28, 2, v.theme.muted, v.theme.bg, 2, v.clock_text));
+}
+
+inline void render_timer_full(const View &v, std::vector<std::string> &out) {
+  out.push_back(cmd_fill(0, 0, 480, 320, v.theme.bg));
+  out.push_back(cmd_cirs(CX, CY, R, v.theme.face));
+  render_spans(sector_spans(CX, CY, R, 0.0, fraction_for(v.remaining_s)), v.color, out);
+  render_face_overlay(v, out);
+  for (int i = 0; i < 12; ++i) {
+    Point p = on_circle(CX, CY, LABEL_R, i / 12.0);
+    out.push_back(xstr(p.x - 14, p.y - 9, 28, 18, 0, v.theme.muted, v.theme.bg, 1, std::to_string(i * 5)));
+  }
+  out.push_back(xstr(276, 70, 194, 34, 3, v.theme.text, v.theme.bg, 0, v.label));
+  render_countdown(v, out);
+  out.push_back(xstr(276, 196, 194, 24, 1, v.theme.muted, v.theme.bg, 0, "klaar om " + v.end_text));
+  render_timer_clock(v, out);
+}
+
+inline void render_sliver(const View &v, double from, double to, std::vector<std::string> &out) {
+  render_spans(sector_spans(CX, CY, R, from, to), v.theme.face, out);
+  render_face_overlay(v, out);
+}
+
+inline void render_alarm_clock(const View &v, std::vector<std::string> &out) {
+  out.push_back(xstr(372, 6, 100, 28, 2, WHITE, ALARM_BG, 2, v.clock_text));
+}
+
+inline void render_alarm_full(const View &v, std::vector<std::string> &out) {
+  out.push_back(cmd_fill(0, 0, 480, 320, ALARM_BG));
+  out.push_back(xstr(0, 40, 480, 60, 10, WHITE, ALARM_BG, 1, BELL_ICON));
+  out.push_back(xstr(0, 104, 480, 60, 5, WHITE, ALARM_BG, 1, "Tijd is om!"));
+  out.push_back(xstr(0, 166, 480, 34, 3, WHITE, ALARM_BG, 1, v.label));
+  out.push_back(cmd_xy2("draw", 150, 216, 330, 272, WHITE));
+  out.push_back(cmd_xy2("draw", 151, 217, 329, 271, WHITE));
+  out.push_back(xstr(152, 218, 176, 52, 3, WHITE, ALARM_BG, 1, "Stop"));
+  render_alarm_clock(v, out);
+}
+
 }  // namespace timetimer
