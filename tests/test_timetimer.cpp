@@ -113,8 +113,10 @@ static void test_machine_alarm_and_afterglow() {
   CHECK(m.state() == State::ALARM);
   CHECK(m.should_beep(NOW + 10));
   CHECK(!m.should_beep(NOW + 11));
-  CHECK(m.should_beep(NOW + 13));
-  CHECK(m.should_beep(NOW + 37));
+  CHECK(!m.should_beep(NOW + 13));
+  CHECK(m.should_beep(NOW + 15));
+  CHECK(m.should_beep(NOW + 35));
+  CHECK(!m.should_beep(NOW + 37));
   m.update(NOW + 39);
   CHECK(m.state() == State::ALARM);
   m.update(NOW + 40);

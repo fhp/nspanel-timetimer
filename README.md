@@ -34,10 +34,11 @@ packages:
 
 - De timer verschijnt zodra er 60 minuten of minder over zijn en houdt het scherm dan aan.
 - Een tik laat het normale panel zien; na 30 seconden zonder aanraking komt de timer terug.
-- Aan het eind piept het panel maximaal 30 seconden; een tik stopt het piepen. Het alarmscherm blijft daarna nog
+- Aan het eind piept het panel elke 5 seconden, maximaal 30 seconden; een tik stopt het piepen. Het alarmscherm blijft daarna nog
   een minuut staan.
 - Een eindtijd die al voorbij is geldt voor morgen. Meer dan 12 uur vooruit wordt geweigerd.
 - Het select `Timer thema` kiest tussen licht en donker.
+- De alarmtoon is een RTTTL-string en is te vervangen via de substitutie `timetimer_tone` in je device-YAML.
 
 Zie `examples/scripts.yaml` voor een script "timer over N minuten" en `examples/automations.yaml` voor een automatisering die het thema met de
 zon laat meewisselen.

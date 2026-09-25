@@ -13,7 +13,7 @@ constexpr int64_t VISIBLE_WINDOW_S = 3600;
 constexpr int64_t MAX_AHEAD_S = 12 * 3600;
 constexpr int64_t DISMISS_RETURN_S = 30;
 constexpr int64_t BEEP_DURATION_S = 30;
-constexpr int64_t BEEP_INTERVAL_S = 3;
+constexpr int64_t BEEP_INTERVAL_S = 5;
 constexpr int64_t AFTERGLOW_S = 60;
 
 constexpr uint16_t COLOR_RED = 55717;
