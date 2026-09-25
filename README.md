@@ -1,14 +1,15 @@
 # NSPanel Time Timer
 
 Een visuele aftel-timer voor de Sonoff NSPanel (EU) met de firmware van
-[NSPanel_HA_Blueprint](https://github.com/Blackymas/NSPanel_HA_Blueprint). Een gekleurde taartpunt krimpt tot de
+[NSPanel-Easy](https://github.com/edwardtfn/NSPanel-Easy). Een gekleurde taartpunt krimpt tot de
 eindtijd; daarnaast staan het label, de resterende tijd en de klok. Als de tijd om is piept het panel.
 
-De timer tekent op de bestaande `qrcode`-pagina; er is geen aangepaste TFT nodig.
+De timer tekent op de lege `canvas`-pagina van NSPanel-Easy; er is geen aangepaste TFT nodig. De voorganger
+NSPanel_HA_Blueprint heeft die pagina niet en wordt niet ondersteund.
 
 ## Installatie
 
-Voeg aan je device-YAML toe, ná het package van NSPanel_HA_Blueprint:
+Voeg aan je device-YAML toe, ná het package van NSPanel-Easy:
 
 ```yaml
 external_components:
@@ -17,7 +18,7 @@ external_components:
     refresh: 300s
 
 packages:
-  # remote_package van NSPanel_HA_Blueprint staat hierboven
+  # remote_package van NSPanel-Easy staat hierboven
   timetimer:
     url: https://github.com/fhp/nspanel-timetimer
     ref: main
@@ -47,7 +48,7 @@ zon laat meewisselen.
 
 ```bash
 make test  # logica testen op de pc
-uvx --with littlefs-python --with fatfs-ng esphome@2026.3.3 compile tests/nspanel-test.yaml  # firmware bouwen
+uvx --with littlefs-python --with fatfs-ng esphome@2026.9.0 compile tests/nspanel-test.yaml  # firmware bouwen
 ```
 
 De rekenlogica staat in `components/timetimer/timetimer.h` en heeft geen ESPHome-afhankelijkheden;

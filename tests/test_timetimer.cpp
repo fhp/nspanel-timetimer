@@ -296,14 +296,15 @@ static void test_render() {
   render_alarm_full(v, cmds);
   CHECK(cmds.front() == "fill 0,0,480,320,47427");
   CHECK(count_prefix(cmds, "draw ") == 2);
-  bool has_title = false, has_alabel = false, has_stop = false, has_aclock = false;
+  bool has_title = false, has_alabel = false, has_stop = false, has_aclock = false, has_bell = false;
   for (const auto &c : cmds) {
+    has_bell |= c == "xstr 0,40,480,60,10,65535,47427,1,1,1,\"\uE09D\"";  // mdi:bell-ring in NSPanel-Easy
     has_title |= c == "xstr 0,104,480,60,5,65535,47427,1,1,1,\"Tijd is om!\"";
     has_alabel |= c == "xstr 0,166,480,34,3,65535,47427,1,1,1,\"Bedtijd\"";
     has_stop |= c == "xstr 152,218,176,52,3,65535,47427,1,1,1,\"Stop\"";
     has_aclock |= c == "xstr 344,8,100,28,2,65535,47427,2,1,1,\"19:37\"";
   }
-  CHECK(has_title && has_alabel && has_stop && has_aclock);
+  CHECK(has_title && has_alabel && has_stop && has_aclock && has_bell);
 }
 
 static void test_format_clock() {

@@ -4,6 +4,7 @@
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
+#include <deque>  // type of the tt_queue global in timetimer.yaml
 #include <string>
 #include <vector>
 
@@ -260,8 +261,8 @@ inline std::vector<Span> sector_spans(int cx, int cy, int r, double from, double
   return out;
 }
 
-// mdi:bell-ring, in the code point range the panel's MDI font uses.
-constexpr const char *BELL_ICON = "";
+// mdi:bell-ring in NSPanel-Easy's MDI font (code point = MDI code point - 0xE2001).
+constexpr const char *BELL_ICON = "\uE09D";
 
 struct View {
   Theme theme;

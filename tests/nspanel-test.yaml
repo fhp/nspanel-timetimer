@@ -12,8 +12,8 @@ external_components:
 
 packages:
   remote_package:
-    url: https://github.com/Blackymas/NSPanel_HA_Blueprint
-    ref: main
+    url: https://github.com/edwardtfn/NSPanel-Easy
+    ref: latest
     refresh: 1d
     files:
       - nspanel_esphome.yaml
