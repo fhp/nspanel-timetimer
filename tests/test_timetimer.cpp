@@ -257,7 +257,7 @@ static void test_render() {
     has_label |= c == "xstr 276,70,194,34,3,6338,65502,0,1,1,\"Bedtijd\"";
     has_countdown |= c == "xstr 276,112,194,80,6,11130,65502,0,1,1,\"22:30\"";
     has_end |= c == "xstr 276,196,194,24,1,23241,65502,0,1,1,\"klaar om 20:00\"";
-    has_clock |= c == "xstr 356,8,100,28,2,23241,65502,2,1,1,\"19:37\"";
+    has_clock |= c == "xstr 344,8,100,28,2,23241,65502,2,1,1,\"19:37\"";
     has_zero |= c == "xstr 126,34,28,18,0,23241,65502,1,1,1,\"0\"";
     has_55 |= starts_with(c, "xstr ") && c.find(",\"55\"") != std::string::npos;
   }
@@ -299,7 +299,7 @@ static void test_render() {
     has_title |= c == "xstr 0,104,480,60,5,65535,47427,1,1,1,\"Tijd is om!\"";
     has_alabel |= c == "xstr 0,166,480,34,3,65535,47427,1,1,1,\"Bedtijd\"";
     has_stop |= c == "xstr 152,218,176,52,3,65535,47427,1,1,1,\"Stop\"";
-    has_aclock |= c == "xstr 356,8,100,28,2,65535,47427,2,1,1,\"19:37\"";
+    has_aclock |= c == "xstr 344,8,100,28,2,65535,47427,2,1,1,\"19:37\"";
   }
   CHECK(has_title && has_alabel && has_stop && has_aclock);
 }

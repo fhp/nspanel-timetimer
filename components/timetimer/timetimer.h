@@ -332,7 +332,7 @@ inline void render_countdown(const View &v, std::vector<std::string> &out) {
 }
 
 inline void render_timer_clock(const View &v, std::vector<std::string> &out) {
-  out.push_back(xstr(356, 8, 100, 28, 2, v.theme.muted, v.theme.bg, 2, v.clock_text));
+  out.push_back(xstr(344, 8, 100, 28, 2, v.theme.muted, v.theme.bg, 2, v.clock_text));
 }
 
 inline void render_timer_full(const View &v, std::vector<std::string> &out) {
@@ -356,7 +356,7 @@ inline void render_sliver(const View &v, double from, double to, std::vector<std
 }
 
 inline void render_alarm_clock(const View &v, std::vector<std::string> &out) {
-  out.push_back(xstr(356, 8, 100, 28, 2, WHITE, ALARM_BG, 2, v.clock_text));
+  out.push_back(xstr(344, 8, 100, 28, 2, WHITE, ALARM_BG, 2, v.clock_text));
 }
 
 inline void render_alarm_full(const View &v, std::vector<std::string> &out) {
