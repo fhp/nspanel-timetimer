@@ -1,5 +1,6 @@
 #include "timetimer.h"
 
+#include <chrono>
 #include <cstdio>
 #include <cstring>
 
@@ -319,6 +320,59 @@ static void test_format_clock() {
   CHECK(format_clock("%Q", 9, 0, "AM", "PM") == "%Q");
 }
 
+static std::vector<Span> reference_spans(int cx, int cy, int r, double from, double to) {
+  std::vector<Span> out;
+  for (int dy = -r; dy <= r; ++dy) {
+    bool in_run = false;
+    int start = 0;
+    for (int dx = -r; dx <= r + 1; ++dx) {
+      bool inside = false;
+      if (dx <= r && dx * dx + dy * dy <= r * r) {
+        double f = fraction_at(dx, dy);
+        inside = f >= from && f < to;
+      }
+      if (inside && !in_run) {
+        in_run = true;
+        start = dx;
+      } else if (!inside && in_run) {
+        in_run = false;
+        out.push_back({int16_t(cx + start), int16_t(cy + dy), int16_t(dx - start)});
+      }
+    }
+  }
+  return out;
+}
+
+static std::vector<uint8_t> coverage(const std::vector<Span> &spans, int cx, int cy, int r) {
+  std::vector<uint8_t> grid((2 * r + 1) * (2 * r + 1), 0);
+  for (const Span &s : spans)
+    for (int x = s.x; x < s.x + s.w; ++x) grid[(s.y - cy + r) * (2 * r + 1) + (x - cx + r)]++;
+  return grid;
+}
+
+static void test_sector_spans_matches_reference() {
+  const int cx = 140, cy = 166, r = 108;
+  const double ranges[][2] = {{0.0, 1.0},   {0.0, 0.375}, {0.37, 0.375}, {0.1, 0.9},    {0.25, 0.75},
+                              {0.5, 0.501}, {0.74, 0.76}, {0.99, 1.0},   {0.0, 0.0028}, {0.6, 0.95}};
+  for (const auto &rg : ranges) {
+    auto got = coverage(sector_spans(cx, cy, r, rg[0], rg[1]), cx, cy, r);
+    auto want = coverage(reference_spans(cx, cy, r, rg[0], rg[1]), cx, cy, r);
+    int diff = 0;
+    for (size_t i = 0; i < got.size(); ++i) diff += got[i] != want[i];
+    CHECK(diff <= 2);  // float rounding exactly on a boundary ray
+  }
+}
+
+static void test_sliver_is_cheap() {
+  auto t0 = std::chrono::steady_clock::now();
+  size_t n = 0;
+  for (int i = 0; i < 200; ++i) n += sector_spans(140, 166, 108, 0.12 + i * 0.001, 0.12 + i * 0.001 + 1.0 / 360.0).size();
+  double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
+  CHECK(n > 0);
+  CHECK(ms < 20.0);  // 200 slivers; scanning the whole disc each time takes far longer
+  if (ms >= 20.0) std::printf("200 slivers took %.1f ms\n", ms);
+}
+
 int main() {
   test_resolve_end_time();
   test_colors();
@@ -329,6 +383,8 @@ int main() {
   test_geometry();
   test_render();
   test_format_clock();
+  test_sector_spans_matches_reference();
+  test_sliver_is_cheap();
   if (failures == 0) std::printf("OK\n");
   return failures == 0 ? 0 : 1;
 }

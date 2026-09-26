@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <cctype>
 #include <cmath>
 #include <cstdint>
@@ -237,17 +238,51 @@ inline Point on_circle(int cx, int cy, double r, double fraction) {
   return {int(std::lround(cx - r * std::sin(fraction * TAU))), int(std::lround(cy - r * std::cos(fraction * TAU)))};
 }
 
+// Same ordering as fraction_at(), scaled to [0, 4), but one float division instead of a double atan2:
+// the ESP32 has no double-precision FPU. u points up, v points left (counterclockwise from 12 o'clock).
+inline float pseudo_angle(float u, float v) {
+  if (u == 0.0f && v == 0.0f) return 0.0f;
+  if (v >= 0.0f) return u >= 0.0f ? v / (u + v) : 1.0f - u / (v - u);
+  return u < 0.0f ? 2.0f - v / (-u - v) : 3.0f + u / (u - v);
+}
+
+inline float pseudo_angle_of_fraction(double fraction) {
+  if (fraction <= 0.0) return 0.0f;
+  if (fraction >= 1.0) return 4.0f;
+  return pseudo_angle(float(std::cos(fraction * TAU)), float(std::sin(fraction * TAU)));
+}
+
 inline std::vector<Span> sector_spans(int cx, int cy, int r, double from, double to) {
   std::vector<Span> out;
   if (to <= from) return out;
-  for (int dy = -r; dy <= r; ++dy) {
+
+  // Only scan the sector's bounding box: an arc endpoint, the centre, or an axis crossing inside the range.
+  int xmin = 0, xmax = 0, ymin = 0, ymax = 0;
+  auto include = [&](int dx, int dy) {
+    xmin = std::min(xmin, dx), xmax = std::max(xmax, dx);
+    ymin = std::min(ymin, dy), ymax = std::max(ymax, dy);
+  };
+  for (double f : {from, std::min(to, 1.0)}) {
+    include(int(std::floor(-r * std::sin(f * TAU))), int(std::floor(-r * std::cos(f * TAU))));
+    include(int(std::ceil(-r * std::sin(f * TAU))), int(std::ceil(-r * std::cos(f * TAU))));
+  }
+  const int axis[4][2] = {{0, -r}, {-r, 0}, {0, r}, {r, 0}};
+  for (int q = 0; q < 4; ++q) {
+    if (q / 4.0 >= from && q / 4.0 < to) include(axis[q][0], axis[q][1]);
+  }
+  xmin = std::max(xmin - 1, -r), xmax = std::min(xmax + 1, r);
+  ymin = std::max(ymin - 1, -r), ymax = std::min(ymax + 1, r);
+
+  const float pa_from = pseudo_angle_of_fraction(from);
+  const float pa_to = pseudo_angle_of_fraction(to);
+  for (int dy = ymin; dy <= ymax; ++dy) {
     bool in_run = false;
     int run_start = 0;
-    for (int dx = -r; dx <= r + 1; ++dx) {
+    for (int dx = xmin; dx <= xmax + 1; ++dx) {
       bool inside = false;
-      if (dx <= r && dx * dx + dy * dy <= r * r) {
-        double f = fraction_at(dx, dy);
-        inside = f >= from && f < to;
+      if (dx <= xmax && dx * dx + dy * dy <= r * r) {
+        float pa = pseudo_angle(float(-dy), float(-dx));
+        inside = pa >= pa_from && pa < pa_to;
       }
       if (inside && !in_run) {
         in_run = true;

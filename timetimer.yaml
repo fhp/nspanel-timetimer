@@ -219,12 +219,12 @@ script:
             id(tt_drawn_fraction) = timetimer::fraction_for(v.remaining_s);
             id(tt_drawn_clock) = v.clock_text;
           } else if (want == 1) {
+            timetimer::render_countdown(v, cmds);  // queued first so the digits never wait for a sliver
             const double f = timetimer::fraction_for(v.remaining_s);
             if (id(tt_drawn_fraction) - f >= 10.0 / 3600.0 or (f == 0.0 and id(tt_drawn_fraction) > 0.0)) {
               timetimer::render_sliver(v, f, id(tt_drawn_fraction), cmds);
               id(tt_drawn_fraction) = f;
             }
-            timetimer::render_countdown(v, cmds);
             if (v.clock_text != id(tt_drawn_clock)) {
               timetimer::render_timer_clock(v, cmds);
               id(tt_drawn_clock) = v.clock_text;
